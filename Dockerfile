@@ -14,7 +14,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 # --- 第二阶段：运行阶段 ---
-FROM openjdk:8-jre-slim
+FROM eclipse-temurin:8-jre-alpine
 
 # 设置工作目录
 WORKDIR /app
