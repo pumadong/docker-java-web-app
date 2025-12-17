@@ -21,10 +21,10 @@ WORKDIR /app
 
 # 从构建阶段拷贝生成的 jar 包到当前镜像
 # 请根据你 pom.xml 中的 artifactId 和 version 修改 jar 包名称
-COPY --from=build /app/target/*.jar docker-java-web-app-0.0.1-SNAPSHOT.jar.jar
+COPY --from=build /app/target/*.jar docker-java-web-app-0.0.1-SNAPSHOT.jar
 
 # 暴露项目端口（假设为 8080）
 EXPOSE 8080
 
 # 启动命令
-ENTRYPOINT ["java", "-jar", "docker-java-web-app-0.0.1-SNAPSHOT.jar.jar"]
+ENTRYPOINT ["java", "-jar", "docker-java-web-app-0.0.1-SNAPSHOT.jar"]
