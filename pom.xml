@@ -55,7 +55,8 @@
                 <version>${spring-boot.version}</version>
                 <configuration>
                     <mainClass>com.bob.dockerjavawebapp.DockerJavaWebAppApplication</mainClass>
-                    <skip>true</skip>
+                    <!-- Maven 在构建项目过程中会忽略这个插件定义的所有任务-->
+                    <!--<skip>true</skip>-->
                 </configuration>
                 <executions>
                     <execution>
