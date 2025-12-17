@@ -14,7 +14,8 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 # --- 第二阶段：运行阶段 ---
-FROM eclipse-temurin:8-jre-alpine
+# FROM eclipse-temurin:8-jre-alpine
+FROM gcr.io/distroless/java:8
 
 # 设置工作目录
 WORKDIR /app
@@ -24,6 +25,7 @@ WORKDIR /app
 COPY --from=build /app/target/*.jar docker-java-web-app-0.0.1-SNAPSHOT.jar
 
 # 暴露项目端口（假设为 8080）
+# EXPOSE 并不实际开放端口，它更像是一种文档说明，告诉开发者或系统该应用预期监听哪个端口
 EXPOSE 8080
 
 # 启动命令
