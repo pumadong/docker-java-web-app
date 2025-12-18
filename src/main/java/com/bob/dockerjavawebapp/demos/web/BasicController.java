@@ -16,6 +16,8 @@
 
 package com.bob.dockerjavawebapp.demos.web;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,10 +30,14 @@ import org.springframework.web.bind.annotation.ResponseBody;
 @Controller
 public class BasicController {
 
+    // 推荐使用 SLF4J 的接口，方便以后更换日志实现
+    private static final Logger logger = LoggerFactory.getLogger(BasicController.class);
+
     // http://127.0.0.1:8080/hello?name=lisi
     @RequestMapping("/hello")
     @ResponseBody
     public String hello(@RequestParam(name = "name", defaultValue = "unknown user") String name) {
+        logger.info("Hello " + name + " from basic controller by logback");
         return "Hello " + name;
     }
 

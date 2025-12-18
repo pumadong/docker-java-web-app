@@ -29,4 +29,5 @@ COPY --from=build /app/target/*.jar docker-java-web-app-0.0.1-SNAPSHOT.jar
 EXPOSE 8080
 
 # 启动命令
-ENTRYPOINT ["java", "-jar", "docker-java-web-app-0.0.1-SNAPSHOT.jar"]
+# 通过环境变量指定 Spring Profile
+ENTRYPOINT ["java","-Dspring.profiles.active=prod", "-jar", "docker-java-web-app-0.0.1-SNAPSHOT.jar"]
