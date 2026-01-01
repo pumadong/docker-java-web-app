@@ -5,13 +5,25 @@
 
 set -e
 
-echo "=========================================="
-echo "开始 ApplicationStart 阶段..."
-echo "=========================================="
+# 设置日志文件路径
+LOG_DIR="/opt/myapp/logs"
+LOG_FILE="${LOG_DIR}/application-start-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p "$LOG_DIR"
+
+# 函数：同时输出到控制台和日志文件
+log() {
+    echo "$@" | tee -a "$LOG_FILE"
+}
+
+log "=========================================="
+log "开始 ApplicationStart 阶段..."
+log "日志文件: $LOG_FILE"
+log "=========================================="
 
 # 从 AWS Systems Manager Parameter Store 读取 Docker 用户名
 # 与 buildspec.yml 中的配置保持一致
-DOCKER_REGISTRY_USERNAME=$(aws ssm get-parameter --name /myapp/docker-credentials/username --with-decryption --query 'Parameter.Value' --output text)
+log "从 AWS Systems Manager Parameter Store 读取 Docker 用户名..."
+DOCKER_REGISTRY_USERNAME=$(aws ssm get-parameter --name /myapp/docker-credentials/username --with-decryption --query 'Parameter.Value' --output text 2>&1 | tee -a "$LOG_FILE" || exit 1)
 
 # 从环境变量获取其他配置信息
 DOCKER_REGISTRY_HOST="${DOCKER_REGISTRY_HOST:-docker.io}"
@@ -28,29 +40,29 @@ APP_DIR="/opt/myapp"
 
 # 方法1: 如果使用 docker-compose.yml
 if [ -f "$APP_DIR/docker-compose.yml" ]; then
-    echo "检测到 docker-compose.yml，使用 Docker Compose 启动服务..."
+    log "检测到 docker-compose.yml，使用 Docker Compose 启动服务..."
     cd "$APP_DIR"
     
     if command -v docker-compose &> /dev/null; then
-        sudo docker-compose up -d
+        sudo docker-compose up -d 2>&1 | tee -a "$LOG_FILE"
     elif docker compose version &> /dev/null; then
-        sudo docker compose up -d
+        sudo docker compose up -d 2>&1 | tee -a "$LOG_FILE"
     else
-        echo "错误: Docker Compose 不可用"
+        log "错误: Docker Compose 不可用"
         exit 1
     fi
     
-    echo "使用 Docker Compose 启动完成"
+    log "使用 Docker Compose 启动完成"
 else
     # 方法2: 直接使用 docker run 启动容器
-    echo "使用 Docker run 启动容器..."
-    echo "镜像: $FULL_IMAGE_NAME"
-    echo "容器名称: $CONTAINER_NAME"
-    echo "端口映射: $HOST_PORT:$APP_PORT"
+    log "使用 Docker run 启动容器..."
+    log "镜像: $FULL_IMAGE_NAME"
+    log "容器名称: $CONTAINER_NAME"
+    log "端口映射: $HOST_PORT:$APP_PORT"
     
     # 检查镜像是否存在
     if ! sudo docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${FULL_IMAGE_NAME}$"; then
-        echo "错误: 镜像 $FULL_IMAGE_NAME 不存在，请先运行 AfterInstall 脚本拉取镜像"
+        log "错误: 镜像 $FULL_IMAGE_NAME 不存在，请先运行 AfterInstall 脚本拉取镜像"
         exit 1
     fi
     
@@ -60,24 +72,25 @@ else
         --name "$CONTAINER_NAME" \
         --restart unless-stopped \
         -p "${HOST_PORT}:${APP_PORT}" \
-        "$FULL_IMAGE_NAME"
+        "$FULL_IMAGE_NAME" 2>&1 | tee -a "$LOG_FILE"
     
-    echo "容器启动命令执行完成"
+    log "容器启动命令执行完成"
 fi
 
 # 等待几秒让容器完全启动
-echo "等待容器启动..."
+log "等待容器启动..."
 sleep 5
 
 # 显示容器状态
-echo "容器状态:"
-sudo docker ps --filter "name=${CONTAINER_NAME}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+log "容器状态:"
+sudo docker ps --filter "name=${CONTAINER_NAME}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | tee -a "$LOG_FILE"
 
 # 显示容器日志（最近几行）
-echo ""
-echo "容器日志（最近10行）:"
-sudo docker logs --tail 10 "$CONTAINER_NAME" 2>&1 || true
+log ""
+log "容器日志（最近10行）:"
+sudo docker logs --tail 10 "$CONTAINER_NAME" 2>&1 | tee -a "$LOG_FILE" || true
 
-echo "ApplicationStart 阶段完成！"
-echo "=========================================="
+log "ApplicationStart 阶段完成！"
+log "详细日志已保存到: $LOG_FILE"
+log "=========================================="
 
