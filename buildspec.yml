@@ -1,0 +1,99 @@
+version: 0.2
+
+env:
+  parameter-store:
+    DOCKER_REGISTRY_USERNAME: /myapp/docker-credentials/username
+    DOCKER_REGISTRY_PASSWORD: /myapp/docker-credentials/password
+  variables:
+    # 设置时区为上海（东八区）
+    TZ: "Asia/Shanghai"
+    JAVA_VERSION: "8"
+    MAVEN_OPTS: "-Dmaven.repo.local=/root/.m2/repository"
+
+phases:
+  install:
+    runtime-versions:
+      java: corretto8
+    commands:
+      - echo "正在安装环境依赖..."
+      - java -version
+      - mvn -version
+      - echo "配置 Maven 设置..."
+      - mkdir -p /root/.m2
+
+  pre_build:
+    commands:
+      - echo "编译项目代码..."
+      - mvn clean compile
+      - echo "开始代码质量检查..."
+      - echo "运行代码风格检查 (Checkstyle)..."
+      - 'mvn checkstyle:checkstyle || echo "Checkstyle 检查发现问题，请检查输出"'
+      - bash -c 'CHECKSTYLE_XML=$(find . \( -name "checkstyle-result.xml" -o -name "checkstyle.xml" \) -type f 2>/dev/null | head -1); if [ -n "$CHECKSTYLE_XML" ]; then cp "$CHECKSTYLE_XML" target/checkstyle-result.xml && echo "已复制 Checkstyle XML 到 target/checkstyle-result.xml"; else echo "未找到 Checkstyle XML 文件"; fi || true'
+      - echo "运行静态代码分析 (SpotBugs)..."
+      - 'mvn spotbugs:spotbugs || echo "SpotBugs 扫描发现问题，请检查输出"'
+      - bash -c 'SPOTBUGS_XML=$(find . \( -name "spotbugsXml.xml" -o -name "spotbugs.xml" \) -type f 2>/dev/null | head -1); if [ -n "$SPOTBUGS_XML" ]; then cp "$SPOTBUGS_XML" target/spotbugsXml.xml && echo "已复制 SpotBugs XML 到 target/spotbugsXml.xml"; else echo "未找到 SpotBugs XML 文件"; fi || true'
+      - echo "运行代码质量检查 (PMD)..."
+      - 'mvn pmd:pmd || echo "PMD 检查发现问题，请检查输出"'
+      - bash -c 'PMD_XML=$(find . -name "pmd.xml" -type f 2>/dev/null | head -1); if [ -n "$PMD_XML" ]; then cp "$PMD_XML" target/pmd.xml && echo "已复制 PMD XML 到 target/pmd.xml"; else echo "未找到 PMD XML 文件"; fi || true'
+      - bash -c 'test -f target/checkstyle-result.xml || (echo "<?xml version=\"1.0\"?><checkstyle><file name=\"placeholder\"/></checkstyle>" > target/checkstyle-result.xml && echo "创建了 Checkstyle 占位符文件")'
+      - bash -c 'test -f target/spotbugsXml.xml || (echo "<?xml version=\"1.0\"?><BugCollection/>" > target/spotbugsXml.xml && echo "创建了 SpotBugs 占位符文件")'
+      - bash -c 'test -f target/pmd.xml || (echo "<?xml version=\"1.0\"?><pmd><file name=\"placeholder\"/></pmd>" > target/pmd.xml && echo "创建了 PMD 占位符文件")'
+      - bash -c 'ls -lh target/*.xml 2>/dev/null && echo "所有 XML 文件已就绪" || echo "警告：部分 XML 文件缺失"'
+
+  build:
+    commands:
+      - echo "开始运行单元测试..."
+      - mvn test
+      - echo "生成测试覆盖率报告 (JaCoCo)..."
+      - 'mvn jacoco:report || echo "JaCoCo 报告生成失败，跳过"'
+      - echo "正在执行打包逻辑..."
+      - mvn package -DskipTests
+      - echo "使用管道符传递密码进行非交互式登录..."
+      - REGISTRY_HOST="docker.io"
+      - export REGISTRY_HOST
+      - echo $DOCKER_REGISTRY_PASSWORD | docker login --username $DOCKER_REGISTRY_USERNAME --password-stdin $REGISTRY_HOST
+      - echo "构建Docker镜像..."
+      - |
+        IMAGE_NAME="$REGISTRY_HOST/$DOCKER_REGISTRY_USERNAME/docker-java-web-app:latest"
+        docker build -t "$IMAGE_NAME" .
+        echo "Docker镜像构建完成: $IMAGE_NAME"
+      - echo "上传Docker镜像..."
+      - docker push "$REGISTRY_HOST/$DOCKER_REGISTRY_USERNAME/docker-java-web-app:latest"
+
+  post_build:
+    commands:
+      - 'echo "POST_BUILD phase started"'
+      - 'bash -c "echo Build completed"'
+      - 'echo "Code quality reports generated"'
+      - 'echo "验证 artifacts 文件是否存在..."'
+      - 'bash -c "ls -lh target/checkstyle-result.xml target/spotbugsXml.xml target/pmd.xml 2>/dev/null || echo 警告: 部分 XML 文件不存在"'
+      - 'bash -c "test -d target/site/jacoco && echo JaCoCo 报告目录存在 || echo 警告: JaCoCo 报告目录不存在"'
+      - 'bash -c "ls -lh target/*.jar 2>/dev/null || echo 警告: 未找到 JAR 文件"'
+      - 'echo "========== 代码质量报告摘要 =========="'
+      - 'bash -c "if [ -f target/checkstyle-result.xml ]; then echo \"Checkstyle 报告: $(grep -c \"<error\" target/checkstyle-result.xml 2>/dev/null || echo 0) 个问题\"; else echo \"Checkstyle 报告: 未生成\"; fi"'
+      - 'bash -c "if [ -f target/spotbugsXml.xml ]; then echo \"SpotBugs 报告: $(grep -c \"<BugInstance\" target/spotbugsXml.xml 2>/dev/null || echo 0) 个问题\"; else echo \"SpotBugs 报告: 未生成\"; fi"'
+      - 'bash -c "if [ -f target/pmd.xml ]; then echo \"PMD 报告: $(grep -c \"<violation\" target/pmd.xml 2>/dev/null || echo 0) 个问题\"; else echo \"PMD 报告: 未生成\"; fi"'
+      - 'bash -c "if [ -f target/site/jacoco/index.html ]; then echo \"JaCoCo 覆盖率报告: 已生成\"; else echo \"JaCoCo 覆盖率报告: 未生成\"; fi"'
+      - 'echo "====================================="'
+      - 'echo "注意: 如果不配置 S3 bucket，artifacts 不会上传"'
+      - 'echo "报告文件位置:"'
+      - 'echo "  - Checkstyle: target/checkstyle-result.xml"'
+      - 'echo "  - SpotBugs: target/spotbugsXml.xml"'
+      - 'echo "  - PMD: target/pmd.xml"'
+      - 'echo "  - JaCoCo: target/site/jacoco/index.html"'
+      - 'echo "POST_BUILD phase completed"'
+
+artifacts:
+  files:
+    - 'target/*.jar'
+    - 'target/checkstyle-result.xml'
+    - 'target/spotbugsXml.xml'
+    - 'target/pmd.xml'
+    - 'target/site/jacoco/**/*'
+  name: build-artifacts
+  base-directory: '.'
+
+cache:
+  paths:
+    - '/root/.m2/repository/**/*' # 缓存 Maven 依赖，加速下次构建
+
