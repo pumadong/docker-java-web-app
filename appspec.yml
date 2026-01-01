@@ -1,0 +1,48 @@
+version: 0.0
+os: linux
+
+# 定义要部署到目标服务器的文件
+# 注意：这些文件需要在 CodeDeploy 部署包中存在
+files:
+  # 如果使用 docker-compose.yml，取消下面的注释
+  # - source: docker-compose.yml
+  #   destination: /opt/myapp/
+  
+  # 部署部署脚本（如果需要）
+  # - source: scripts/
+  #   destination: /opt/myapp/scripts/
+
+# 定义部署生命周期钩子
+# 注意：脚本文件需要放在部署包的 scripts/ 目录下，并且需要可执行权限
+hooks:
+  # 在安装之前执行：准备工作（如安装 Docker、清理旧文件等）
+  BeforeInstall:
+    - location: scripts/before-install.sh
+      timeout: 300
+      runas: root
+
+  # 在安装之后执行：拉取最新的 Docker 镜像
+  # 可以从环境变量或配置文件获取镜像名称
+  AfterInstall:
+    - location: scripts/after-install.sh
+      timeout: 600
+      runas: root
+
+  # 停止应用程序：停止当前运行的 Docker 容器
+  ApplicationStop:
+    - location: scripts/application-stop.sh
+      timeout: 300
+      runas: root
+
+  # 启动应用程序：启动新的 Docker 容器
+  ApplicationStart:
+    - location: scripts/application-start.sh
+      timeout: 300
+      runas: root
+
+  # 验证服务：检查服务是否正常启动
+  ValidateService:
+    - location: scripts/validate-service.sh
+      timeout: 300
+      runas: root
+
