@@ -61,10 +61,21 @@ else
     log "端口映射: $HOST_PORT:$APP_PORT"
     
     # 检查镜像是否存在
-    if ! sudo docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${FULL_IMAGE_NAME}$"; then
-        log "错误: 镜像 $FULL_IMAGE_NAME 不存在，请先运行 AfterInstall 脚本拉取镜像"
+    # Docker 存储 docker.io 镜像时可能不包含 docker.io/ 前缀，所以需要检查两种格式
+    IMAGE_NAME_WITHOUT_REGISTRY="${FULL_IMAGE_NAME#docker.io/}"
+    if ! sudo docker image inspect "$FULL_IMAGE_NAME" >/dev/null 2>&1 && \
+       ! sudo docker image inspect "$IMAGE_NAME_WITHOUT_REGISTRY" >/dev/null 2>&1; then
+        log "错误: 镜像 $FULL_IMAGE_NAME 或 $IMAGE_NAME_WITHOUT_REGISTRY 不存在，请先运行 AfterInstall 脚本拉取镜像"
         exit 1
     fi
+    
+    # 确定实际使用的镜像名称（优先使用不带 docker.io/ 的版本，因为这是 Docker 存储的格式）
+    if sudo docker image inspect "$IMAGE_NAME_WITHOUT_REGISTRY" >/dev/null 2>&1; then
+        ACTUAL_IMAGE_NAME="$IMAGE_NAME_WITHOUT_REGISTRY"
+    else
+        ACTUAL_IMAGE_NAME="$FULL_IMAGE_NAME"
+    fi
+    log "使用镜像: $ACTUAL_IMAGE_NAME"
     
     # 启动容器
     # 可以根据实际需求添加更多参数，如环境变量、卷挂载等
@@ -72,7 +83,7 @@ else
         --name "$CONTAINER_NAME" \
         --restart unless-stopped \
         -p "${HOST_PORT}:${APP_PORT}" \
-        "$FULL_IMAGE_NAME" 2>&1 | tee -a "$LOG_FILE"
+        "$ACTUAL_IMAGE_NAME" 2>&1 | tee -a "$LOG_FILE"
     
     log "容器启动命令执行完成"
 fi
